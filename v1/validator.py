@@ -138,7 +138,10 @@ def validate_docker_runner(image_name, host_script_dir_str, container_script_dir
     # Create a unique filename for the test script
     temp_script_name = f"test_docker_run_{uuid.uuid4().hex[:8]}.py"
     host_script_path = host_script_dir / temp_script_name
-    container_script_path = Path(container_script_dir_str) / temp_script_name
+    
+    # FIXED: Ensure container path uses forward slashes for Linux containers
+    container_script_dir_unix = container_script_dir_str.replace('\\', '/')
+    container_script_path = f"{container_script_dir_unix}/{temp_script_name}"
 
     # Test script content
     script_content = (
@@ -165,38 +168,18 @@ def validate_docker_runner(image_name, host_script_dir_str, container_script_dir
             print("   Ensure Docker daemon is running and image name is correct.")
             return False
 
-
         print(f"Running script in Docker container. Image: {image_name}")
         print(f"Host path: {host_script_path} -> Container path: {container_script_path}")
         
+        # FIXED: Ensure volume binding uses correct path format
         volumes_dict = {
-            str(host_script_dir.resolve()): { # Use resolved absolute path
-                'bind': container_script_dir_str,
-                'mode': 'rw' # read-write, though read-only ('ro') would also work for just execution
+            str(host_script_dir.resolve()): {
+                'bind': container_script_dir_unix,  # Use unix-style path
+                'mode': 'rw'
             }
         }
-        command_to_run = ["python3", str(container_script_path)]
-
-        container = client.containers.run(
-            image=image_name, 
-            command=command_to_run,
-            volumes=volumes_dict,
-            remove=True, # Equivalent to --rm
-            detach=False, # Run in foreground and get logs/status
-            stdout=True,
-            stderr=True
-        )
-        
-        # In docker-py >5.0.0, 'container' is the logs if detach=False
-        # For older versions, you'd do:
-        # status_code = container.wait()['StatusCode']
-        # stdout = container.logs(stdout=True, stderr=False).decode('utf-8')
-        # stderr = container.logs(stdout=False, stderr=True).decode('utf-8')
-        # For newer versions where run(detach=False) returns bytes:
-        stdout = container.decode('utf-8') # Assuming output is utf-8
-        stderr = "" # With detach=False, stdout and stderr are combined in the result or handled differently.
-                       # To get them separately and the status code, it's often easier to run detached
-                       # and then wait and get logs. Let's adjust for clarity:
+        # FIXED: Use the corrected container path
+        command_to_run = ["python3", container_script_path]
 
         container_obj = client.containers.run(
             image=image_name,
