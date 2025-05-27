@@ -178,7 +178,7 @@ def validate_docker_runner(image_name, host_script_dir_str, container_script_dir
         command_to_run = ["python3", str(container_script_path)]
 
         container = client.containers.run(
-            image=image_name,
+            image=image_name, 
             command=command_to_run,
             volumes=volumes_dict,
             remove=True, # Equivalent to --rm
