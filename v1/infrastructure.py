@@ -44,6 +44,7 @@ def load_config():
         "RUNNER_DOCKER_IMAGE": os.getenv("RUNNER_DOCKER_IMAGE"),
         "RUNNER_HOST_SCRIPT_DIR": os.getenv("RUNNER_HOST_SCRIPT_DIR"),
         "RUNNER_CONTAINER_SCRIPT_DIR": os.getenv("RUNNER_CONTAINER_SCRIPT_DIR"),
+        "OUTPUT_SAVE_DIR": os.getenv("OUTPUT_SAVE_DIR"),
     }
 
 def route_next_agent(state) -> str:

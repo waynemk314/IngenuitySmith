@@ -5,6 +5,8 @@ Contains state definitions, framework class, and main execution logic
 
 from typing import TypedDict, Annotated, List, Dict, Any, Optional
 from pathlib import Path
+import json
+import os
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
@@ -98,44 +100,90 @@ class AgenticDevelopmentFramework:
     def _save_final_output(self, final_state: Dict[str, Any], filename: str = "output.py", 
                           save_metadata: bool = False) -> bool:
         """Save the final code and optionally metadata in the shared directory"""
+        print(f"🔍 Debug: Attempting to save final output...")
+        print(f"   Filename: {filename}")
+        print(f"   Save metadata: {save_metadata}")
+        
         try:
+            # Check if we have code to save
             if not final_state.get('current_code'):
-                print("   ⚠️ No code to save")
+                print("   ⚠️ No code to save - 'current_code' is empty or missing")
                 return False
             
-            # Use the same shared directory as the runner
-            host_script_dir = Path(self.config["RUNNER_HOST_SCRIPT_DIR"])
+            print(f"   Code length: {len(final_state['current_code'])} characters")
+            
+            # Get and validate the host script directory
+            host_script_dir_str = self.config.get("OUTPUT_SAVE_DIR")
+            if not host_script_dir_str:
+                print("   ❌ OUTPUT_SAVE_DIR not configured in environment")
+                # Fallback to current directory
+                host_script_dir_str = "./output"
+                print(f"   Using fallback directory: {host_script_dir_str}")
+            
+            host_script_dir = Path(host_script_dir_str).resolve()
             output_path = host_script_dir / filename
             
+            print(f"   Target directory: {host_script_dir}")
+            print(f"   Full output path: {output_path}")
+            
             # Ensure directory exists
-            host_script_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                host_script_dir.mkdir(parents=True, exist_ok=True)
+                print(f"   ✅ Directory created/verified: {host_script_dir}")
+            except Exception as e:
+                print(f"   ❌ Failed to create directory: {e}")
+                return False
+            
+            # Check if directory is writable
+            if not os.access(host_script_dir, os.W_OK):
+                print(f"   ❌ Directory is not writable: {host_script_dir}")
+                return False
             
             # Write the final code
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(final_state['current_code'])
-            
-            print(f"   ✅ Final code saved as: {output_path}")
+            try:
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write(final_state['current_code'])
+                print(f"   ✅ Final code saved as: {output_path}")
+                
+                # Verify the file was written
+                if output_path.exists():
+                    file_size = output_path.stat().st_size
+                    print(f"   ✅ File verification: {file_size} bytes written")
+                else:
+                    print(f"   ❌ File was not created successfully")
+                    return False
+                    
+            except Exception as e:
+                print(f"   ❌ Failed to write code file: {e}")
+                return False
             
             # Optionally save metadata
             if save_metadata:
-                metadata_path = host_script_dir / f"{filename.rsplit('.', 1)[0]}_metadata.json"
-                import json
-                metadata = {
-                    "original_request": final_state.get('original_request', ''),
-                    "iterations": final_state.get('iteration_count', 0),
-                    "status": final_state.get('status', ''),
-                    "execution_results": final_state.get('execution_results', {}),
-                    "prose_feedback": final_state.get('prose_feedback', ''),
-                    "errors": final_state.get('errors', [])
-                }
-                with open(metadata_path, "w", encoding="utf-8") as f:
-                    json.dump(metadata, f, indent=2, default=str)
-                print(f"   ✅ Metadata saved as: {metadata_path}")
+                try:
+                    metadata_path = host_script_dir / f"{filename.rsplit('.', 1)[0]}_metadata.json"
+                    metadata = {
+                        "original_request": final_state.get('original_request', ''),
+                        "iterations": final_state.get('iteration_count', 0),
+                        "status": final_state.get('status', ''),
+                        "execution_results": final_state.get('execution_results', {}),
+                        "prose_feedback": final_state.get('prose_feedback', ''),
+                        "errors": final_state.get('errors', []),
+                        "timestamp": str(pd.Timestamp.now()) if 'pd' in globals() else "N/A"
+                    }
+                    
+                    with open(metadata_path, "w", encoding="utf-8") as f:
+                        json.dump(metadata, f, indent=2, default=str)
+                    print(f"   ✅ Metadata saved as: {metadata_path}")
+                    
+                except Exception as e:
+                    print(f"   ⚠️ Failed to save metadata (code still saved): {e}")
             
             return True
             
         except Exception as e:
-            print(f"   ❌ Error saving output: {e}")
+            print(f"   ❌ Unexpected error saving output: {e}")
+            import traceback
+            print(f"   ❌ Full traceback: {traceback.format_exc()}")
             return False
     
     def develop(self, request: str, max_iterations: int = 5) -> Dict[str, Any]:
@@ -164,17 +212,30 @@ class AgenticDevelopmentFramework:
             print(f"Status: {final_state['status']}")
             print(f"Iterations: {final_state['iteration_count']}")
             
-            # Save final code as output.py if development was successful
-            if (final_state['status'] == 'completed' and 
-                final_state.get('current_code') and
-                final_state.get('execution_results', {}).get('status_code') == 0):
-                
+            # Debug information about the saving conditions
+            print(f"\n🔍 Save Conditions Check:")
+            print(f"   Status == 'completed': {final_state['status'] == 'completed'}")
+            print(f"   Has current_code: {bool(final_state.get('current_code'))}")
+            print(f"   Execution status_code: {final_state.get('execution_results', {}).get('status_code')}")
+            print(f"   Status code == 0: {final_state.get('execution_results', {}).get('status_code') == 0}")
+            
+            # Modified condition - save if we have code, regardless of execution status
+            should_save = (
+                final_state['status'] == 'completed' and 
+                final_state.get('current_code')
+            )
+            
+            # Alternative: Always save if we have code (remove other conditions)
+            # should_save = bool(final_state.get('current_code'))
+            
+            if should_save:
                 print("\n💾 Saving Final Output...")
-                # Save with default filename (output.py)
-                self._save_final_output(final_state)
-                
-                # Alternative: Save with custom filename and metadata
-                # self._save_final_output(final_state, filename="my_solution.py", save_metadata=True)
+                success = self._save_final_output(final_state, save_metadata=True)
+                if not success:
+                    print("   ⚠️ Save operation failed - check the debug output above")
+            else:
+                print("\n💾 Skipping save - conditions not met")
+                print("   Either status != 'completed' or no code generated")
             
             if final_state['current_code']:
                 print(f"\n📄 Final Code:\n{final_state['current_code']}")
@@ -192,6 +253,8 @@ class AgenticDevelopmentFramework:
             
         except Exception as e:
             print(f"\n❌ Framework error: {e}")
+            import traceback
+            print(f"Full traceback: {traceback.format_exc()}")
             return {"error": str(e), "status": "failed"}
 
 # --- Usage Example ---
@@ -202,7 +265,7 @@ if __name__ == "__main__":
     # Example development request
     result = framework.develop(
         request=coding_task_prompts[0], # use predefined prompts
-        max_iterations=3
+        max_iterations=5
     )
     
     # Example with custom prompts
