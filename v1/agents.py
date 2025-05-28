@@ -260,7 +260,6 @@ Output Requirements
 
 Provide the refactored code
 Include a brief summary of changes made
-If significant changes were made, provide a diff or highlight the key modifications
 Confirm that functionality remains unchanged
 
 Quality Checklist

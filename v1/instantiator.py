@@ -264,7 +264,7 @@ if __name__ == "__main__":
     
     # Example development request
     result = framework.develop(
-        request=coding_task_prompts[0], # use predefined prompts
+        request=coding_task_prompts[1], # use predefined prompts
         max_iterations=5
     )
     
