@@ -2,25 +2,30 @@
 test for code output from agentic system
 """
 
-import random
+import re
+import sys
 
-def calculate_pi_monte_carlo(n: int) -> float:
-    """Calculate pi using the Monte Carlo method.
+def is_palindrome(s: str) -> bool:
+    """Check if a string is a palindrome, ignoring case and non-alphanumeric characters.
 
     Args:
-        n (int): Number of random samples.
+        s (str): The input string to check.
 
     Returns:
-        float: Approximation of pi.
-
-    Raises:
-        ValueError: If n is not positive.
+        bool: True if the string is a palindrome, False otherwise.
     """
-    if n <= 0:
-        raise ValueError("Number of samples must be greater than zero.")
+    cleaned_string = re.sub(r'[^a-zA-Z0-9]', '', s).lower()
+    return cleaned_string == cleaned_string[::-1]
 
-    pi_approximation = (sum(1 for _ in range(n) if random.random()**2 + random.random()**2 <= 1) / n) * 4
-    return round(pi_approximation, 10)
+def main():
+    """Main function to execute the palindrome check from command-line arguments."""
+    if len(sys.argv) != 2:
+        print("Usage: python script.py <string>", file=sys.stderr)
+        sys.exit(1)
+
+    input_string = sys.argv[1]
+    result = is_palindrome(input_string)
+    print(result)
 
 if __name__ == "__main__":
-    print(calculate_pi_monte_carlo(100000000))
+    main()
